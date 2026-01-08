@@ -13,6 +13,7 @@ export interface BabyLog {
   height: number; // cm
   headCircumference: number; // cm
   immunization: string;
+  condition: 'SEHAT' | 'GIZI_KURANG' | 'GIZI_BURUK' | 'STUNTING' | 'SAKIT';
   notes: string;
   nakesId: string;
 }
@@ -48,10 +49,12 @@ export interface User {
   role: UserRole;
   phone: string;
   isActive: boolean;
-  isPostpartum?: boolean; // Status sudah melahirkan
+  isPostpartum?: boolean; 
   deliveryData?: DeliveryData;
-  pregnancyHistory?: DeliveryData[]; // Arsip kehamilan sebelumnya
-  babyLogs?: BabyLog[]; // Monitoring bayi terintegrasi
+  pregnancyHistory?: DeliveryData[]; 
+  babyLogs?: BabyLog[]; 
+  isBabyMonitoringActive?: boolean; // Default true jika isPostpartum
+  babyMonitoringEndReason?: 'LULUS_USIA' | 'MENINGGAL';
 }
 
 export interface ANCVisit {

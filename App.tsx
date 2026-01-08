@@ -8,7 +8,7 @@ import {
   UserPlus, Edit3, X, Clock, Baby, Trash2, ShieldCheck, LayoutDashboard, Activity, 
   MapPin, ShieldAlert, QrCode, BookOpen, Map as MapIcon, Phone, Navigation as NavIcon, Crosshair,
   RefreshCw, Stethoscope, Heart, Droplets, Thermometer, ClipboardCheck, ArrowRight, ExternalLink,
-  Info, Bell, Eye, Star, TrendingUp, CheckSquare, Zap, Shield, List, Sparkles, BrainCircuit, Waves, Utensils, Download, Upload, Database, UserX, Save, PartyPopper
+  Info, Bell, Eye, Star, TrendingUp, CheckSquare, Zap, Shield, List, Sparkles, BrainCircuit, Waves, Utensils, Download, Upload, Database, UserX, Save, PartyPopper, Archive
 } from 'lucide-react';
 
 import { Sidebar } from './Sidebar';
@@ -50,6 +50,7 @@ export default function App() {
   const [editingPatient, setEditingPatient] = useState<User | null>(null);
   const [isAddingVisit, setIsAddingVisit] = useState<User | null>(null);
   const [isAddingBabyLog, setIsAddingBabyLog] = useState<User | null>(null);
+  const [editingBabyLog, setEditingBabyLog] = useState<{patient: User, log: BabyLog} | null>(null);
   const [confirmingDelivery, setConfirmingDelivery] = useState<User | null>(null);
   const [startingNewPregnancy, setStartingNewPregnancy] = useState<User | null>(null);
   const [editingVisit, setEditingVisit] = useState<{patient: User, visit: ANCVisit} | null>(null);
@@ -167,7 +168,7 @@ export default function App() {
 
     setState(prev => ({
       ...prev,
-      users: prev.users.map(u => u.id === confirmingDelivery.id ? { ...u, isPostpartum: true, deliveryData: data, babyLogs: [] } : u),
+      users: prev.users.map(u => u.id === confirmingDelivery.id ? { ...u, isPostpartum: true, isBabyMonitoringActive: true, deliveryData: data, babyLogs: [] } : u),
       alerts: prev.alerts.filter(a => a.patientId !== confirmingDelivery.id) // Clear missed alerts
     }));
     
@@ -176,30 +177,75 @@ export default function App() {
     showNotification(`Selamat! Data persalinan ${confirmingDelivery.name} telah disimpan.`);
   };
 
+  const handleFinishMonitoring = (patientId: string, reason: 'LULUS_USIA' | 'MENINGGAL') => {
+    const patient = state.users.find(u => u.id === patientId);
+    if (!patient) return;
+
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(u => u.id === patientId ? {
+        ...u,
+        isBabyMonitoringActive: false,
+        babyMonitoringEndReason: reason
+      } : u)
+    }));
+
+    addLog('FINISH_BABY_MONITORING', 'BABY', `Menyelesaikan monitoring bayi Ny. ${patient.name}. Alasan: ${reason}`);
+    showNotification(`Monitoring bayi ${patient.name} dihentikan (${reason === 'LULUS_USIA' ? 'Lulus' : 'Meninggal'}).`);
+  };
+
   const handleAddBabyLog = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!isAddingBabyLog || !currentUser) return;
+    const activePatient = isAddingBabyLog || editingBabyLog?.patient;
+    if (!activePatient || !currentUser) return;
     const formData = new FormData(e.currentTarget);
     const log: BabyLog = {
-      id: `blog-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      id: editingBabyLog ? editingBabyLog.log.id : `blog-${Date.now()}`,
+      date: editingBabyLog ? editingBabyLog.log.date : new Date().toISOString().split('T')[0],
       ageInMonths: parseInt(formData.get('ageInMonths') as string),
       weight: parseFloat(formData.get('weight') as string),
       height: parseFloat(formData.get('height') as string),
       headCircumference: parseFloat(formData.get('headCircumference') as string),
       immunization: formData.get('immunization') as string,
+      condition: formData.get('condition') as any,
       notes: formData.get('notes') as string,
-      nakesId: currentUser.id
+      nakesId: editingBabyLog ? editingBabyLog.log.nakesId : currentUser.id
     };
 
     setState(prev => ({
       ...prev,
-      users: prev.users.map(u => u.id === isAddingBabyLog.id ? { ...u, babyLogs: [...(u.babyLogs || []), log] } : u)
+      users: prev.users.map(u => {
+        if (u.id === activePatient.id) {
+          let updatedLogs = [...(u.babyLogs || [])];
+          if (editingBabyLog) {
+            updatedLogs = updatedLogs.map(l => l.id === editingBabyLog.log.id ? log : l);
+          } else {
+            updatedLogs.push(log);
+          }
+          return { ...u, babyLogs: updatedLogs };
+        }
+        return u;
+      })
     }));
 
-    addLog('ADD_BABY_LOG', 'BABY', `Mencatat tumbuh kembang bayi Ny. ${isAddingBabyLog.name} usia ${log.ageInMonths} bln`);
+    addLog(editingBabyLog ? 'EDIT_BABY_LOG' : 'ADD_BABY_LOG', 'BABY', `${editingBabyLog ? 'Memperbarui' : 'Mencatat'} tumbuh kembang bayi Ny. ${activePatient.name} usia ${log.ageInMonths} bln`);
     setIsAddingBabyLog(null);
-    showNotification("Data tumbuh kembang bayi disimpan");
+    setEditingBabyLog(null);
+    showNotification(editingBabyLog ? "Rekam medis bayi diperbarui" : "Data tumbuh kembang bayi disimpan");
+  };
+
+  const handleDeleteBabyLog = (patientId: string, logId: string) => {
+    if (!window.confirm('Hapus permanen rekam medis bayi ini?')) return;
+    const patient = state.users.find(u => u.id === patientId);
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(u => u.id === patientId ? {
+        ...u,
+        babyLogs: u.babyLogs?.filter(l => l.id !== logId)
+      } : u)
+    }));
+    addLog('DELETE_BABY_LOG', 'BABY', `Menghapus rekam medis bayi Ny. ${patient?.name || 'Pasien'}`);
+    showNotification('Rekam medis bayi dihapus');
   };
 
   const handleNewPregnancySubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -219,6 +265,8 @@ export default function App() {
           return {
             ...u,
             isPostpartum: false,
+            isBabyMonitoringActive: undefined,
+            babyMonitoringEndReason: undefined,
             deliveryData: undefined,
             pregnancyHistory: history,
             hpht: newHpht,
@@ -288,6 +336,7 @@ export default function App() {
     setEditingPatient(null);
     setIsAddingVisit(null);
     setIsAddingBabyLog(null);
+    setEditingBabyLog(null);
     setConfirmingDelivery(null);
     setStartingNewPregnancy(null);
     setEditingVisit(null);
@@ -383,6 +432,7 @@ export default function App() {
     });
     setIsAddingVisit(null);
     setEditingVisit(null);
+    // After editing, re-open the profile if needed, or just show notification
     showNotification(editingVisit ? 'Data riwayat diperbarui' : 'Pemeriksaan Berhasil Disimpan');
   };
 
@@ -633,46 +683,58 @@ export default function App() {
                       <div className="space-y-3 col-span-2 md:col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Hb (g/dL)</label><input name="hb" type="number" step="0.1" defaultValue={editingVisit?.visit.hb} className="w-full p-6 bg-gray-50 border-none rounded-2xl font-black text-lg outline-none focus:ring-8 focus:ring-indigo-50" required /></div>
                   </div><div className="grid grid-cols-1 md:grid-cols-2 gap-16"><div className="space-y-8"><h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] flex items-center gap-2"><AlertCircle size={16}/> Observasi Bahaya</h4><div className="grid grid-cols-2 gap-4">{['Perdarahan', 'Ketuban Pecah', 'Kejang', 'Pusing Hebat', 'Nyeri Perut Hebat', 'Demam'].map(s => (<label key={s} className="flex items-center gap-5 p-5 bg-gray-50 rounded-2xl hover:bg-red-50 transition-all cursor-pointer border-2 border-transparent hover:border-red-200 group"><input type="checkbox" name="dangerSigns" value={s} defaultChecked={editingVisit?.visit.dangerSigns.includes(s)} className="accent-red-600 w-5 h-5 shrink-0" onChange={(e) => { const current = visitPreviewData.dangerSigns || []; const updated = e.target.checked ? [...current, s] : current.filter(x => x !== s); setVisitPreviewData(prev => ({ ...prev, dangerSigns: updated })); }} /><span className="text-[10px] font-black text-gray-600 uppercase tracking-widest group-hover:text-red-600 truncate">{s}</span></label>))}</div></div><div className="space-y-8"><h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] flex items-center gap-2"><Baby size={16}/> Kondisi Janin</h4><div className="space-y-4"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Gerak Janin</label><select name="fetalMovement" defaultValue={editingVisit?.visit.fetalMovement || 'Normal'} className="w-full p-6 bg-gray-50 border-none rounded-2xl font-black text-sm outline-none focus:ring-8 focus:ring-indigo-50" onChange={(e) => setVisitPreviewData(prev => ({ ...prev, fetalMovement: e.target.value }))} required><option value="Normal">NORMAL / AKTIF</option><option value="Kurang Aktif">KURANG AKTIF</option><option value="Tidak Ada">TIDAK ADA (EMERGENCY)</option></select></div><div className="space-y-4"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Keluhan</label><textarea name="complaints" defaultValue={editingVisit?.visit.complaints} placeholder="Tuliskan jika ada..." className="w-full p-6 bg-gray-50 border-none rounded-[2rem] font-bold text-sm outline-none focus:ring-8 focus:ring-indigo-50" rows={3}></textarea></div></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-indigo-50/50 p-10 rounded-[3.5rem] border border-indigo-100"><div className="space-y-6"><h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.3em] flex items-center gap-3"><ClipboardCheck size={16}/> Rencana (Plan)</h4><select name="followUp" defaultValue={editingVisit?.visit.followUp || 'ANC_RUTIN'} className="w-full p-6 bg-white border border-indigo-200 rounded-2xl font-black text-xs outline-none focus:ring-8 focus:ring-indigo-100" required><option value="ANC_RUTIN">KONTROL RUTIN</option><option value="KONSUL_DOKTER">KONSULTASI OBGYN</option><option value="RUJUK_RS">RUJUK RS (KRITIS)</option></select><textarea name="notes" defaultValue={editingVisit?.visit.nakesNotes} placeholder="Catatan Bidan..." className="w-full p-6 bg-white border border-indigo-200 rounded-[2rem] font-bold text-xs outline-none focus:ring-8 focus:ring-indigo-100" rows={3}></textarea></div><div className="space-y-6"><h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.3em] flex items-center gap-3"><Calendar size={16}/> Jadwal Ulang</h4><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-4">Kontrol Berikutnya</label><input type="date" name="nextVisit" defaultValue={editingVisit?.visit.nextVisitDate} className="w-full p-6 bg-white border border-indigo-200 rounded-2xl font-black outline-none text-base" required /></div></div></div><div className="flex flex-col md:flex-row gap-8 pb-4"><button type="submit" className="w-full md:flex-1 py-7 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase text-sm tracking-[0.3em] shadow-2xl transition-all"><Save size={18} className="inline mr-2"/> {editingVisit ? 'Simpan Perubahan' : 'Selesaikan'}</button><button type="button" onClick={() => {setIsAddingVisit(null); setEditingVisit(null);}} className="w-full md:py-7 px-16 bg-gray-100 text-gray-500 rounded-[2.5rem] font-black uppercase text-sm tracking-widest hover:bg-gray-200 transition-all">Batal</button></div></form></div></div>
           )}
-          {isAddingBabyLog && (
+          {(isAddingBabyLog || editingBabyLog) && (
             <div className="fixed inset-0 z-[100] bg-emerald-950/80 backdrop-blur-2xl flex items-start justify-center p-2 md:p-10 overflow-y-auto">
               <div className="bg-white w-full max-w-4xl rounded-[4.5rem] shadow-2xl my-auto animate-in zoom-in-95 duration-700 relative overflow-hidden">
                 <div className="bg-emerald-600 p-12 text-white flex justify-between items-center relative overflow-hidden">
                   <div className="relative z-10">
-                    <h2 className="text-4xl font-black uppercase tracking-tighter text-white">Monitoring Pertumbuhan Bayi</h2>
-                    <p className="text-emerald-100 font-bold text-xs uppercase tracking-widest mt-2">Ny. {isAddingBabyLog.name}</p>
+                    <h2 className="text-4xl font-black uppercase tracking-tighter text-white">{editingBabyLog ? 'Ubah Rekam Medis Bayi' : 'Monitoring Pertumbuhan Bayi'}</h2>
+                    <p className="text-emerald-100 font-bold text-xs uppercase tracking-widest mt-2">Ny. {isAddingBabyLog?.name || editingBabyLog?.patient.name}</p>
                   </div>
-                  <button onClick={() => setIsAddingBabyLog(null)} className="relative z-10 p-5 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><X size={18}/></button>
+                  <button onClick={() => {setIsAddingBabyLog(null); setEditingBabyLog(null);}} className="relative z-10 p-5 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><X size={18}/></button>
                 </div>
                 <form onSubmit={handleAddBabyLog} className="p-16 space-y-12">
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                      <div className="space-y-3">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Usia Bayi (Bulan)</label>
-                       <input name="ageInMonths" type="number" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
+                       <input name="ageInMonths" type="number" defaultValue={editingBabyLog?.log.ageInMonths} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
                      </div>
                      <div className="space-y-3">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Berat Badan (Kg)</label>
-                       <input name="weight" type="number" step="0.01" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
+                       <input name="weight" type="number" step="0.01" defaultValue={editingBabyLog?.log.weight} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
                      </div>
                      <div className="space-y-3">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Panjang Badan (Cm)</label>
-                       <input name="height" type="number" step="0.1" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
+                       <input name="height" type="number" step="0.1" defaultValue={editingBabyLog?.log.height} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
                      </div>
                      <div className="space-y-3">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Lingkar Kepala (Cm)</label>
-                       <input name="headCircumference" type="number" step="0.1" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
+                       <input name="headCircumference" type="number" step="0.1" defaultValue={editingBabyLog?.log.headCircumference} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required />
+                     </div>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Imunisasi / Vitamin</label>
+                        <input name="immunization" type="text" defaultValue={editingBabyLog?.log.immunization} placeholder="Misal: BCG, Polio 1, Vit A" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" />
+                     </div>
+                     <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Kondisi Kesehatan Bayi</label>
+                        <select name="condition" defaultValue={editingBabyLog?.log.condition || 'SEHAT'} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" required>
+                          <option value="SEHAT">SEHAT / NORMAL</option>
+                          <option value="GIZI_KURANG">GIZI KURANG</option>
+                          <option value="GIZI_BURUK">GIZI BURUK</option>
+                          <option value="STUNTING">INDIKASI STUNTING</option>
+                          <option value="SAKIT">SEDANG SAKIT / DEMAM</option>
+                        </select>
                      </div>
                    </div>
                    <div className="space-y-3">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Imunisasi / Vitamin</label>
-                      <input name="immunization" type="text" placeholder="Misal: BCG, Polio 1, Vit A" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" />
-                   </div>
-                   <div className="space-y-3">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Catatan Perkembangan</label>
-                      <textarea name="notes" className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" rows={3}></textarea>
+                      <textarea name="notes" defaultValue={editingBabyLog?.log.notes} className="w-full p-5 bg-gray-50 border-none rounded-2xl font-black" rows={3}></textarea>
                    </div>
                    <div className="flex gap-6">
-                     <button type="submit" className="flex-1 py-7 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl">Simpan Data Tumbuh Kembang</button>
-                     <button type="button" onClick={() => setIsAddingBabyLog(null)} className="px-10 py-7 bg-gray-100 text-gray-400 rounded-[2rem] font-black uppercase text-xs">Batal</button>
+                     <button type="submit" className="flex-1 py-7 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl">{editingBabyLog ? 'Perbarui Data' : 'Simpan Data Tumbuh Kembang'}</button>
+                     <button type="button" onClick={() => {setIsAddingBabyLog(null); setEditingBabyLog(null);}} className="px-10 py-7 bg-gray-100 text-gray-400 rounded-[2rem] font-black uppercase text-xs">Batal</button>
                    </div>
                 </form>
               </div>
@@ -776,7 +838,25 @@ export default function App() {
           {view === 'contact' && <ContactModule />}
           {viewingPatientProfile && (
             <div className="fixed inset-0 z-[110] bg-indigo-950/90 backdrop-blur-3xl flex items-start justify-center p-2 md:p-12 overflow-y-auto pt-10 pb-10">
-              <div className="bg-gray-50 w-full max-w-7xl rounded-[4.5rem] shadow-2xl relative border-4 border-indigo-500/20 my-auto"><PatientProfileView patient={state.users.find(u => u.id === viewingPatientProfile)!} visits={state.ancVisits} onClose={() => setViewingPatientProfile(null)} onEditVisit={(v) => { setEditingVisit({patient: state.users.find(u => u.id === viewingPatientProfile)!, visit: v}); }} onDeleteVisit={handleDeleteVisit} isStaff={currentUser.role !== UserRole.USER} onConfirmDelivery={(u) => {setViewingPatientProfile(null); setConfirmingDelivery(u);}} onNewPregnancy={(u) => {setViewingPatientProfile(null); setStartingNewPregnancy(u);}} onAddBabyLog={(u) => {setViewingPatientProfile(null); setIsAddingBabyLog(u);}} /></div>
+              <div className="bg-gray-50 w-full max-w-7xl rounded-[4.5rem] shadow-2xl relative border-4 border-indigo-500/20 my-auto">
+                <PatientProfileView 
+                  patient={state.users.find(u => u.id === viewingPatientProfile)!} 
+                  visits={state.ancVisits} 
+                  onClose={() => setViewingPatientProfile(null)} 
+                  onEditVisit={(v) => { 
+                    setEditingVisit({patient: state.users.find(u => u.id === viewingPatientProfile)!, visit: v}); 
+                    setViewingPatientProfile(null); // Menutup profil agar form edit terlihat
+                  }} 
+                  onDeleteVisit={handleDeleteVisit} 
+                  isStaff={currentUser.role !== UserRole.USER} 
+                  onConfirmDelivery={(u) => {setViewingPatientProfile(null); setConfirmingDelivery(u);}} 
+                  onNewPregnancy={(u) => {setViewingPatientProfile(null); setStartingNewPregnancy(u);}} 
+                  onAddBabyLog={(u) => {setViewingPatientProfile(null); setIsAddingBabyLog(u);}} 
+                  onEditBabyLog={(patient, log) => {setViewingPatientProfile(null); setEditingBabyLog({patient, log});}}
+                  onDeleteBabyLog={handleDeleteBabyLog}
+                  onFinishMonitoring={handleFinishMonitoring}
+                />
+              </div>
             </div>
           )}
         </div>

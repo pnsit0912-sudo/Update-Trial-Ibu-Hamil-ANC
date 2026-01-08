@@ -5,7 +5,7 @@ import { calculatePregnancyProgress, getRiskCategory } from './utils';
 import { 
   X, Baby, Calendar, MapPin, Activity, Stethoscope, 
   Heart, Droplets, AlertCircle, ClipboardCheck, ArrowLeft, Phone, Info,
-  ShieldCheck, CheckCircle, BookOpen, ShieldAlert, Edit3, Trash2, PartyPopper, History, UserPlus, TrendingUp, Scale, Ruler, BrainCircuit, ListFilter, Download
+  ShieldCheck, CheckCircle, BookOpen, ShieldAlert, Edit3, Trash2, PartyPopper, History, UserPlus, TrendingUp, Scale, Ruler, BrainCircuit, ListFilter, Download, Archive
 } from 'lucide-react';
 
 interface PatientProfileViewProps {
@@ -17,13 +17,32 @@ interface PatientProfileViewProps {
   onConfirmDelivery?: (user: User) => void;
   onNewPregnancy?: (user: User) => void;
   onAddBabyLog?: (user: User) => void;
+  onEditBabyLog?: (patient: User, log: BabyLog) => void;
+  onDeleteBabyLog?: (patientId: string, logId: string) => void;
+  onFinishMonitoring?: (patientId: string, reason: 'LULUS_USIA' | 'MENINGGAL') => void;
   isStaff?: boolean;
 }
 
+const getConditionStyle = (condition: string) => {
+  switch (condition) {
+    case 'SEHAT': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    case 'GIZI_KURANG': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    case 'GIZI_BURUK': return 'bg-red-100 text-red-700 border-red-200';
+    case 'STUNTING': return 'bg-orange-100 text-orange-700 border-orange-200';
+    case 'SAKIT': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+};
+
+const formatCondition = (condition: string) => {
+  return condition.replace('_', ' ').toUpperCase();
+};
+
 export const PatientProfileView: React.FC<PatientProfileViewProps> = ({ 
-  patient, visits, onClose, onEditVisit, onDeleteVisit, onConfirmDelivery, onNewPregnancy, onAddBabyLog, isStaff = false 
+  patient, visits, onClose, onEditVisit, onDeleteVisit, onConfirmDelivery, onNewPregnancy, onAddBabyLog, onEditBabyLog, onDeleteBabyLog, onFinishMonitoring, isStaff = false 
 }) => {
   const [activeTab, setActiveTab] = useState<'ANC' | 'BABY'>(patient.isPostpartum ? 'BABY' : 'ANC');
+  const [showFinishOptions, setShowFinishOptions] = useState(false);
   const progress = calculatePregnancyProgress(patient.hpht);
   const patientVisits = visits
     .filter(v => v.patientId === patient.id)
@@ -33,14 +52,13 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
   const risk = getRiskCategory(patient.totalRiskScore, latestVisit);
 
   const sortedBabyLogs = [...(patient.babyLogs || [])].sort((a, b) => b.ageInMonths - a.ageInMonths);
+  const latestBabyLog = sortedBabyLogs[0];
 
   const handleDownloadPDF = () => {
-    // Memberikan feedback visual sebelum mencetak
     const originalTitle = document.title;
     const documentName = patient.isPostpartum ? `KIA_BAYI_${patient.name}` : `KIA_IBU_${patient.name}`;
     document.title = documentName.replace(/\s+/g, '_').toUpperCase();
     
-    // Memberi sedikit jeda agar UI dipastikan ter-render jika ada animasi
     setTimeout(() => {
       window.print();
       document.title = originalTitle;
@@ -50,7 +68,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
   return (
     <div className="relative animate-in fade-in slide-in-from-bottom-10 duration-700 bg-white rounded-[3rem] md:rounded-[4rem] overflow-hidden shadow-2xl max-w-7xl w-full mx-auto border border-gray-100 print:shadow-none print:border-none print:rounded-none">
       
-      {/* Tombol Tutup - No Print */}
       <div className="absolute top-6 right-6 z-50 no-print">
         <button onClick={onClose} className="p-3 bg-white/80 backdrop-blur text-gray-400 hover:text-red-500 rounded-full transition-all border border-gray-100 flex items-center justify-center group shadow-sm">
           <X size={20} className="group-hover:rotate-90 transition-transform" />
@@ -58,7 +75,20 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
       </div>
 
       <div className="p-6 md:p-10 lg:p-14 space-y-10 print:p-0 print:space-y-6">
-        {/* Header Section - Refined for PDF integration */}
+        {/* Banner Monitoring Selesai */}
+        {patient.isPostpartum && patient.isBabyMonitoringActive === false && (
+          <div className="bg-slate-900 p-6 rounded-[2rem] text-white flex items-center justify-between animate-in slide-in-from-top-4 no-print">
+             <div className="flex items-center gap-6">
+                <div className="bg-white/10 p-4 rounded-2xl"><Archive size={24} className="text-indigo-400" /></div>
+                <div>
+                   <h4 className="text-lg font-black uppercase tracking-tighter">Monitoring Bayi Telah Selesai</h4>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Status: {patient.babyMonitoringEndReason === 'LULUS_USIA' ? 'LULUS (>1 TAHUN)' : 'MENINGGAL DUNIA'}</p>
+                </div>
+             </div>
+             <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] hidden md:block">Lokasi disembunyikan dari peta utama</p>
+          </div>
+        )}
+
         <div className="bg-white p-8 md:p-12 rounded-[3.5rem] border border-gray-50 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.02)] print:border-none print:shadow-none print:rounded-none print:pb-10">
           <div className="flex flex-col md:flex-row items-center gap-8 relative z-10 w-full md:w-auto">
             <div className={`w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center text-4xl md:text-5xl font-black shadow-2xl shrink-0 bg-gradient-to-br from-emerald-400 to-teal-600 text-white print:shadow-none print:border-2 print:border-teal-500`}>
@@ -92,9 +122,35 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Tombol Aksi - No Print */}
           <div className="flex flex-wrap justify-center md:justify-end gap-3 relative z-10 w-full md:w-auto no-print">
-            {patient.isPostpartum && isStaff && (
+            {patient.isPostpartum && isStaff && patient.isBabyMonitoringActive !== false && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowFinishOptions(!showFinishOptions)}
+                  className="px-6 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"
+                >
+                  <Archive size={16} /> Selesaikan Monitoring
+                </button>
+                {showFinishOptions && (
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 p-3 z-[100] space-y-2">
+                     <button 
+                       onClick={() => { if(window.confirm('Monitoring selesai karena bayi sudah 1 tahun?')) { onFinishMonitoring?.(patient.id, 'LULUS_USIA'); setShowFinishOptions(false); } }}
+                       className="w-full text-left px-4 py-3 bg-emerald-50 text-emerald-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
+                     >
+                       Bayi Lulus (> 1 Thn)
+                     </button>
+                     <button 
+                       onClick={() => { if(window.confirm('Monitoring berhenti karena kematian bayi? Data akan tetap disimpan sebagai riwayat.')) { onFinishMonitoring?.(patient.id, 'MENINGGAL'); setShowFinishOptions(false); } }}
+                       className="w-full text-left px-4 py-3 bg-red-50 text-red-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
+                     >
+                       Bayi Meninggal Dunia
+                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {patient.isPostpartum && isStaff && patient.isBabyMonitoringActive !== false && (
               <>
                 <button onClick={() => onAddBabyLog?.(patient)} className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2">
                   <TrendingUp size={16} /> Update Tumbuh Kembang
@@ -115,7 +171,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Tab Navigation - No Print */}
         <div className="flex gap-4 px-4 no-print">
            <button 
              onClick={() => setActiveTab('ANC')} 
@@ -133,7 +188,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
            )}
         </div>
 
-        {/* Header Print Only (Judul Laporan) */}
         <div className="hidden print:block text-center border-b-4 border-emerald-600 pb-4 mb-8">
            <h3 className="text-2xl font-black uppercase tracking-tighter">
              {activeTab === 'BABY' ? 'REKAM MEDIS PERTUMBUHAN BAYI' : 'REKAM MEDIS KEHAMILAN (ANC)'}
@@ -142,7 +196,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 print:grid-cols-12">
-          {/* Sidebar Profil - Print Optimized */}
           <div className="lg:col-span-4 space-y-8 print:col-span-4">
             {patient.isPostpartum ? (
               <div className="bg-[#0b8e62] p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden h-full print:p-6 print:rounded-2xl print:shadow-none">
@@ -203,7 +256,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Main Area - Print Optimized Table */}
           <div className="lg:col-span-8 space-y-8 print:col-span-8">
             {activeTab === 'ANC' ? (
               <div className="space-y-10 print:space-y-6">
@@ -237,6 +289,24 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Oleh Nakes ID: {visit.nakesId}</p>
                             </div>
                           </div>
+                          {isStaff && (
+                            <div className="flex items-center gap-3 no-print">
+                              <button 
+                                onClick={() => onEditVisit?.(visit)} 
+                                className="p-4 bg-white text-gray-400 hover:text-indigo-600 rounded-2xl transition-all border border-gray-100 shadow-sm hover:shadow-md"
+                                title="Edit Riwayat"
+                              >
+                                <Edit3 size={18} />
+                              </button>
+                              <button 
+                                onClick={() => { if(window.confirm('Hapus riwayat pemeriksaan ini secara permanen?')) onDeleteVisit?.(visit.id) }} 
+                                className="p-4 bg-white text-gray-400 hover:text-red-500 rounded-2xl transition-all border border-gray-100 shadow-sm hover:shadow-md"
+                                title="Hapus Riwayat"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <div className="p-10 space-y-10 print:p-6 print:space-y-4">
                           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 print:grid-cols-5">
@@ -273,7 +343,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                   </div>
                 </div>
 
-                {/* Table matching Screenshot styling - For PDF, we ensure background colors are kept */}
                 <div className="bg-white rounded-[3.5rem] shadow-sm border border-gray-100 overflow-hidden print:rounded-2xl print:border print:shadow-none">
                    {sortedBabyLogs.length === 0 ? (
                      <div className="p-24 text-center flex flex-col items-center">
@@ -286,11 +355,10 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                           <thead className="bg-[#f8fcfb] print:bg-emerald-50">
                             <tr className="text-[10px] font-black uppercase text-gray-400 border-b border-gray-100 print:text-emerald-800">
                               <th className="px-10 py-8 print:px-4 print:py-4">Usia & Tanggal</th>
-                              <th className="px-8 py-8 print:px-4 print:py-4">BB (KG)</th>
-                              <th className="px-8 py-8 print:px-4 print:py-4">PB (CM)</th>
-                              <th className="px-8 py-8 print:px-4 print:py-4">LK (CM)</th>
-                              <th className="px-8 py-8 print:px-4 print:py-4">Imunisasi / Vit</th>
-                              <th className="px-8 py-8 print:px-4 print:py-4">Keterangan</th>
+                              <th className="px-8 py-8 print:px-4 print:py-4">Status & Gizi</th>
+                              <th className="px-8 py-8 print:px-4 print:py-4">Metrik (BB/PB/LK)</th>
+                              <th className="px-8 py-8 print:px-4 print:py-4">Imunisasi</th>
+                              <th className="px-8 py-8 print:px-4 print:py-4">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50">
@@ -301,13 +369,16 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                                    <p className="text-[9px] font-bold text-gray-400 mt-1">{log.date}</p>
                                 </td>
                                 <td className="px-8 py-8 print:px-4 print:py-4">
-                                   <span className="text-base font-black text-indigo-600 print:text-sm">{log.weight}</span>
+                                   <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border ${getConditionStyle(log.condition)}`}>
+                                     {formatCondition(log.condition || 'SEHAT')}
+                                   </span>
                                 </td>
                                 <td className="px-8 py-8 print:px-4 print:py-4">
-                                   <span className="text-base font-black text-indigo-600 print:text-sm">{log.height}</span>
-                                </td>
-                                <td className="px-8 py-8 print:px-4 print:py-4">
-                                   <span className="text-base font-black text-indigo-600 print:text-sm">{log.headCircumference}</span>
+                                   <div className="flex gap-3">
+                                      <div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase">BB</span><span className="text-xs font-black text-indigo-600">{log.weight}kg</span></div>
+                                      <div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase">PB</span><span className="text-xs font-black text-indigo-600">{log.height}cm</span></div>
+                                      <div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase">LK</span><span className="text-xs font-black text-indigo-600">{log.headCircumference}cm</span></div>
+                                   </div>
                                 </td>
                                 <td className="px-8 py-8 print:px-4 print:py-4">
                                    <div className="flex flex-wrap gap-1">
@@ -319,9 +390,26 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                                    </div>
                                 </td>
                                 <td className="px-8 py-8 print:px-4 print:py-4">
-                                   <p className="text-xs font-bold text-gray-500 italic max-w-[150px] truncate group-hover:whitespace-normal transition-all print:text-[9px]">
-                                     {log.notes || '-'}
-                                   </p>
+                                   {isStaff && patient.isBabyMonitoringActive !== false ? (
+                                     <div className="flex items-center gap-2 no-print">
+                                        <button 
+                                          onClick={() => onEditBabyLog?.(patient, log)}
+                                          className="p-2.5 bg-gray-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-50"
+                                        >
+                                          <Edit3 size={14} />
+                                        </button>
+                                        <button 
+                                          onClick={() => onDeleteBabyLog?.(patient.id, log.id)}
+                                          className="p-2.5 bg-gray-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm border border-red-50"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                     </div>
+                                   ) : (
+                                     <p className="text-xs font-bold text-gray-500 italic max-w-[150px] truncate group-hover:whitespace-normal transition-all print:text-[9px]">
+                                       {log.notes || '-'}
+                                     </p>
+                                   )}
                                 </td>
                               </tr>
                             ))}
@@ -338,8 +426,10 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                            <ShieldCheck size={28} className="print:w-5 print:h-5" />
                         </div>
                         <div>
-                           <h4 className="text-lg font-black text-emerald-900 uppercase print:text-base">Status Pertumbuhan: Normal</h4>
-                           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Berdasarkan data input kunjungan terakhir</p>
+                           <h4 className="text-lg font-black text-emerald-900 uppercase print:text-base">
+                             Status Pertumbuhan: {latestBabyLog?.condition ? formatCondition(latestBabyLog.condition) : 'NORMAL'}
+                           </h4>
+                           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Berdasarkan penilaian tenaga kesehatan terakhir</p>
                         </div>
                      </div>
                      <button 
@@ -356,7 +446,6 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Footer Branding for PDF printing */}
       <div className="hidden print:block text-center pt-10 border-t border-gray-100 mt-10">
         <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Dokumen Resmi - Smart ANC Puskesmas Pasar Minggu</p>
         <p className="text-[9px] font-bold text-gray-300 mt-1 uppercase">Dicetak pada {new Date().toLocaleString('id-ID')}</p>
