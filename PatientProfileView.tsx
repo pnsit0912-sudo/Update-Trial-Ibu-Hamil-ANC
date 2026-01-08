@@ -68,7 +68,7 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
   return (
     <div className="relative animate-in fade-in slide-in-from-bottom-10 duration-700 bg-white rounded-[3rem] md:rounded-[4rem] overflow-hidden shadow-2xl max-w-7xl w-full mx-auto border border-gray-100 print:shadow-none print:border-none print:rounded-none">
       
-      <div className="absolute top-6 right-6 z-50 no-print">
+      <div className="absolute top-6 right-6 z-[120] no-print">
         <button onClick={onClose} className="p-3 bg-white/80 backdrop-blur text-gray-400 hover:text-red-500 rounded-full transition-all border border-gray-100 flex items-center justify-center group shadow-sm">
           <X size={20} className="group-hover:rotate-90 transition-transform" />
         </button>
@@ -82,7 +82,7 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                 <div className="bg-white/10 p-4 rounded-2xl"><Archive size={24} className="text-indigo-400" /></div>
                 <div>
                    <h4 className="text-lg font-black uppercase tracking-tighter">Monitoring Bayi Telah Selesai</h4>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Status: {patient.babyMonitoringEndReason === 'LULUS_USIA' ? 'LULUS (>1 TAHUN)' : 'MENINGGAL DUNIA'}</p>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Status: {patient.babyMonitoringEndReason === 'LULUS_USIA' ? 'LULUS (&gt; 1 TAHUN)' : 'MENINGGAL DUNIA'}</p>
                 </div>
              </div>
              <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] hidden md:block">Lokasi disembunyikan dari peta utama</p>
@@ -132,12 +132,12 @@ export const PatientProfileView: React.FC<PatientProfileViewProps> = ({
                   <Archive size={16} /> Selesaikan Monitoring
                 </button>
                 {showFinishOptions && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 p-3 z-[100] space-y-2">
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 p-3 z-[150] space-y-2 animate-in zoom-in-95">
                      <button 
                        onClick={() => { if(window.confirm('Monitoring selesai karena bayi sudah 1 tahun?')) { onFinishMonitoring?.(patient.id, 'LULUS_USIA'); setShowFinishOptions(false); } }}
                        className="w-full text-left px-4 py-3 bg-emerald-50 text-emerald-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
                      >
-                       Bayi Lulus (> 1 Thn)
+                       Bayi Lulus (&gt; 1 Thn)
                      </button>
                      <button 
                        onClick={() => { if(window.confirm('Monitoring berhenti karena kematian bayi? Data akan tetap disimpan sebagai riwayat.')) { onFinishMonitoring?.(patient.id, 'MENINGGAL'); setShowFinishOptions(false); } }}

@@ -14,6 +14,7 @@ interface MapViewProps {
 export const MapView: React.FC<MapViewProps> = ({ users, visits }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
+  const markerLayerGroup = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
     if (mapRef.current && !leafletMap.current) {
@@ -23,6 +24,9 @@ export const MapView: React.FC<MapViewProps> = ({ users, visits }) => {
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
+
+      // Inisialisasi LayerGroup untuk marker
+      markerLayerGroup.current = L.layerGroup().addTo(map);
 
       // Icon Puskesmas (Pusat Operasional)
       const clinicIcon = L.divIcon({
@@ -40,12 +44,16 @@ export const MapView: React.FC<MapViewProps> = ({ users, visits }) => {
             <p class="text-[10px] font-bold text-gray-400 mt-2 uppercase">${PUSKESMAS_INFO.address}</p>
           </div>
         `);
+    }
 
-      // Pemetaan Marker Pasien (Ibu Hamil & Bayi AKTIF)
+    // UPDATE MARKERS SETIAP KALI DATA PASIEN BERUBAH
+    if (leafletMap.current && markerLayerGroup.current) {
+      markerLayerGroup.current.clearLayers(); // Bersihkan marker lama sebelum update
+
       users.filter(u => u.role === UserRole.USER && u.lat).forEach(p => {
-        // Logika Integrasi: Sembunyikan bayi jika monitoring sudah tidak aktif
+        // FILTER: Sembunyikan bayi jika monitoring sudah tidak aktif
         if (p.isPostpartum && p.isBabyMonitoringActive === false) {
-          return; // Skip marker ini
+          return; // Lewati iterasi ini
         }
 
         const patientVisits = visits.filter(v => v.patientId === p.id);
@@ -167,7 +175,7 @@ export const MapView: React.FC<MapViewProps> = ({ users, visits }) => {
         });
 
         L.marker([p.lat!, p.lng!], { icon: customIcon })
-          .addTo(map)
+          .addTo(markerLayerGroup.current!)
           .bindPopup(popupContent, {
             maxWidth: 300,
             className: 'custom-leaflet-popup'
