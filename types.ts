@@ -5,19 +5,6 @@ export enum UserRole {
   USER = 'USER'
 }
 
-export interface BabyLog {
-  id: string;
-  date: string;
-  ageInMonths: number;
-  weight: number; // kg
-  height: number; // cm
-  headCircumference: number; // cm
-  immunization: string;
-  condition: 'SEHAT' | 'GIZI_KURANG' | 'GIZI_BURUK' | 'STUNTING' | 'SAKIT';
-  notes: string;
-  nakesId: string;
-}
-
 export interface DeliveryData {
   deliveryDate: string;
   deliveryType: 'NORMAL' | 'SC' | 'VAKUM' | 'INDUKSI';
@@ -49,12 +36,9 @@ export interface User {
   role: UserRole;
   phone: string;
   isActive: boolean;
-  isPostpartum?: boolean; 
+  isPostpartum?: boolean; // Status sudah melahirkan
   deliveryData?: DeliveryData;
-  pregnancyHistory?: DeliveryData[]; 
-  babyLogs?: BabyLog[]; 
-  isBabyMonitoringActive?: boolean; // Default true jika isPostpartum
-  babyMonitoringEndReason?: 'LULUS_USIA' | 'MENINGGAL';
+  pregnancyHistory?: DeliveryData[]; // Arsip kehamilan sebelumnya
 }
 
 export interface ANCVisit {
